@@ -27,6 +27,10 @@ class LeitoresEscritoresUnificado:
         self.running = False
         self.paused = False
         
+        # Controle de operações em andamento
+        self.operacoes_ativas = 0
+        self.operacoes_lock = threading.Lock()
+        
         # Queue para comunicação thread-safe
         self.message_queue = queue.Queue()
         
@@ -35,7 +39,9 @@ class LeitoresEscritoresUnificado:
             'total_leituras': 0,
             'total_escritas': 0,
             'leitores_simultaneos_max': 0,
-            'tempo_inicio': None
+            'tempo_inicio': None,
+            'tempo_pausado': 0,
+            'tempo_ultima_pausa': None
         }
         
         # Configurações
@@ -101,6 +107,7 @@ class LeitoresEscritoresUnificado:
         # Criar as abas
         self.setup_simulacao_tab()
         self.setup_exemplos_tab()
+        self.setup_demonstracoes_tab()
         self.setup_configuracoes_tab()
         self.setup_testes_tab()
         self.setup_ajuda_tab()
@@ -333,6 +340,413 @@ class LeitoresEscritoresUnificado:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
     
+    def setup_demonstracoes_tab(self):
+        """Aba de demonstrações educativas detalhadas"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="🎭 Demonstrações")
+        
+        main_frame = ttk.Frame(frame, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Título
+        title_label = ttk.Label(main_frame, text="🎭 Demonstrações Educativas Guiadas", 
+                               font=("Arial", 16, "bold"))
+        title_label.pack(pady=(0, 20))
+        
+        # Frame dividido
+        paned_window = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True)
+        
+        # Lado esquerdo - Lista de demonstrações
+        left_frame = ttk.Frame(paned_window)
+        paned_window.add(left_frame, weight=1)
+        
+        demo_frame = ttk.LabelFrame(left_frame, text="Demonstrações Disponíveis", padding="10")
+        demo_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Demonstrações especiais
+        demonstracoes = [
+            {
+                'nome': '🎯 Tutorial Básico',
+                'desc': 'Introdução ao problema com explicações passo-a-passo',
+                'config': {'num_leitores': 2, 'num_escritores': 1, 'duracao': 15},
+                'tipo': 'tutorial'
+            },
+            {
+                'nome': '🔍 Análise de Concorrência',
+                'desc': 'Demonstração detalhada de leitores simultâneos',
+                'config': {'num_leitores': 4, 'num_escritores': 1, 'duracao': 20},
+                'tipo': 'analise'
+            },
+            {
+                'nome': '🚨 Detecção de Problemas',
+                'desc': 'Como identificar e entender starvation',
+                'config': {'num_leitores': 8, 'num_escritores': 1, 'duracao': 25},
+                'tipo': 'problema'
+            },
+            {
+                'nome': '⚖️ Comparação de Cenários',
+                'desc': 'Executa múltiplos cenários sequencialmente para comparar',
+                'config': {'comparacao': True, 'duracao': 45},
+                'tipo': 'comparacao'
+            },
+            {
+                'nome': '🎓 Demonstração Completa',
+                'desc': 'Apresentação completa com todos os conceitos',
+                'config': {'completa': True, 'duracao': 60},
+                'tipo': 'completa'
+            }
+        ]
+        
+        for demo in demonstracoes:
+            self.criar_botao_demonstracao(demo_frame, demo)
+        
+        # Lado direito - Área de explicações
+        right_frame = ttk.Frame(paned_window)
+        paned_window.add(right_frame, weight=1)
+        
+        explicacoes_frame = ttk.LabelFrame(right_frame, text="Explicações e Conceitos", padding="10")
+        explicacoes_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.demo_explicacoes = scrolledtext.ScrolledText(explicacoes_frame, height=20, 
+                                                         font=("Arial", 10), wrap=tk.WORD)
+        self.demo_explicacoes.pack(fill=tk.BOTH, expand=True)
+        
+        # Texto inicial
+        texto_inicial = """
+🎭 DEMONSTRAÇÕES EDUCATIVAS
+
+Bem-vindo às demonstrações guiadas do problema dos Leitores-Escritores!
+
+🎯 TUTORIAL BÁSICO:
+Perfeito para iniciantes. Explica conceitos fundamentais com exemplos simples.
+
+🔍 ANÁLISE DE CONCORRÊNCIA:
+Foca na demonstração de leitores simultâneos e como eles coexistem.
+
+🚨 DETECÇÃO DE PROBLEMAS:
+Mostra o fenômeno de starvation e como identificá-lo.
+
+⚖️ COMPARAÇÃO DE CENÁRIOS:
+Executa diferentes configurações sequencialmente para comparar comportamentos.
+
+🎓 DEMONSTRAÇÃO COMPLETA:
+Apresentação abrangente com todos os conceitos e situações.
+
+Clique em uma demonstração à esquerda para começar!
+        """
+        self.demo_explicacoes.insert(tk.END, texto_inicial.strip())
+        self.demo_explicacoes.config(state=tk.DISABLED)
+    
+    def criar_botao_demonstracao(self, parent, demo):
+        """Cria botão para demonstração específica"""
+        demo_frame = ttk.Frame(parent, relief="raised", borderwidth=1)
+        demo_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Nome
+        nome_label = ttk.Label(demo_frame, text=demo['nome'], 
+                              font=("Arial", 11, "bold"))
+        nome_label.pack(anchor=tk.W, padx=10, pady=(10, 5))
+        
+        # Descrição
+        desc_label = ttk.Label(demo_frame, text=demo['desc'], 
+                              font=("Arial", 9), wraplength=200)
+        desc_label.pack(anchor=tk.W, padx=10, pady=(0, 5))
+        
+        # Duração
+        if 'duracao' in demo['config']:
+            duracao_text = f"⏱️ Duração: {demo['config']['duracao']}s"
+            duracao_label = ttk.Label(demo_frame, text=duracao_text, 
+                                    font=("Arial", 8), foreground="gray")
+            duracao_label.pack(anchor=tk.W, padx=10)
+        
+        # Botão
+        btn = ttk.Button(demo_frame, text="▶️ Iniciar Demonstração", 
+                        command=lambda d=demo: self.iniciar_demonstracao(d))
+        btn.pack(pady=10)
+    
+    def iniciar_demonstracao(self, demo):
+        """Inicia demonstração específica"""
+        tipo = demo['tipo']
+        
+        if tipo == 'tutorial':
+            self.executar_tutorial_basico()
+        elif tipo == 'analise':
+            self.executar_analise_concorrencia()
+        elif tipo == 'problema':
+            self.executar_deteccao_problemas()
+        elif tipo == 'comparacao':
+            self.executar_comparacao_cenarios()
+        elif tipo == 'completa':
+            self.executar_demonstracao_completa()
+    
+    def executar_tutorial_basico(self):
+        """Tutorial básico para iniciantes"""
+        # Ir para aba de simulação
+        self.notebook.select(0)
+        
+        # Parar simulação se estiver rodando
+        if self.running:
+            self.stop_simulation()
+            time.sleep(0.5)
+        
+        # Limpar log
+        self.clear_log()
+        
+        # Configurar cenário simples
+        self.leitores_var.set("2")
+        self.escritores_var.set("1")
+        
+        # Iniciar tutorial
+        self.log_message("🎓 TUTORIAL BÁSICO - LEITORES-ESCRITORES", "sistema")
+        self.log_message("=" * 60, "sistema")
+        self.log_message("📚 BEM-VINDO ao tutorial do problema clássico!", "sistema")
+        self.log_message("", "sistema")
+        self.log_message("🎯 OBJETIVO: Entender como leitores e escritores se coordenam", "sistema")
+        self.log_message("⚙️ CENÁRIO: 2 leitores + 1 escritor (simples para começar)", "sistema")
+        self.log_message("", "sistema")
+        self.log_message("📖 CONCEITOS FUNDAMENTAIS:", "sistema")
+        self.log_message("• LEITORES: Podem ler simultaneamente (não destrutivo)", "sistema")
+        self.log_message("• ESCRITORES: Precisam acesso exclusivo (operação destrutiva)", "sistema")
+        self.log_message("• EXCLUSÃO MÚTUA: Leitores vs Escritores não podem coexistir", "sistema")
+        self.log_message("", "sistema")
+        
+        # Iniciar simulação em etapas
+        self.root.after(5000, lambda: self.continuar_tutorial_etapa1())
+    
+    def continuar_tutorial_etapa1(self):
+        """Etapa 1 do tutorial"""
+        self.log_message("🚀 ETAPA 1: Iniciando simulação...", "sistema")
+        self.log_message("👀 OBSERVE: Como os eventos aparecem no log", "sistema")
+        self.log_message("", "sistema")
+        
+        self.start_simulation()
+        
+        # Próxima etapa
+        self.root.after(8000, lambda: self.continuar_tutorial_etapa2())
+    
+    def continuar_tutorial_etapa2(self):
+        """Etapa 2 do tutorial"""
+        self.log_message("", "sistema")
+        self.log_message("📊 ETAPA 2: Analisando comportamento...", "sistema")
+        self.log_message("🔍 OBSERVE NO STATUS:", "sistema")
+        self.log_message(f"• Leitores Ativos: {self.leitores_ativos} (pode ser > 1)", "sistema")
+        self.log_message(f"• Dados Atuais: {self.dados} (incrementa com escritas)", "sistema")
+        self.log_message("• Estatísticas: Veja painel direito", "sistema")
+        self.log_message("", "sistema")
+        
+        # Etapa final
+        self.root.after(7000, lambda: self.finalizar_tutorial())
+    
+    def finalizar_tutorial(self):
+        """Finaliza tutorial"""
+        self.stop_simulation()
+        
+        self.log_message("", "sistema")
+        self.log_message("🎉 TUTORIAL CONCLUÍDO!", "sistema")
+        self.log_message("=" * 40, "sistema")
+        self.log_message("🎓 APRENDIZADOS:", "sistema")
+        self.log_message("✅ Leitores podem coexistir", "sistema")
+        self.log_message("✅ Escritores têm acesso exclusivo", "sistema")
+        self.log_message("✅ Sistema mantém consistência", "sistema")
+        self.log_message("", "sistema")
+        self.log_message("🚀 PRÓXIMOS PASSOS:", "sistema")
+        self.log_message("• Experimente outros exemplos", "sistema")
+        self.log_message("• Teste diferentes configurações", "sistema")
+        self.log_message("• Execute outras demonstrações", "sistema")
+    
+    def executar_analise_concorrencia(self):
+        """Demonstração focada na análise de concorrência"""
+        self.notebook.select(0)
+        if self.running:
+            self.stop_simulation()
+            time.sleep(0.5)
+        
+        self.clear_log()
+        self.leitores_var.set("4")
+        self.escritores_var.set("1")
+        
+        self.log_message("🔍 ANÁLISE DE CONCORRÊNCIA", "sistema")
+        self.log_message("=" * 50, "sistema")
+        self.log_message("🎯 FOCO: Demonstrar leitores simultâneos", "sistema")
+        self.log_message("⚙️ CENÁRIO: 4 leitores + 1 escritor", "sistema")
+        
+        self.root.after(3000, lambda: self._iniciar_analise())
+    
+    def _iniciar_analise(self):
+        self.start_simulation()
+        self.root.after(5000, lambda: self.log_message("📊 OBSERVE: Múltiplos leitores ativos simultaneamente!", "sistema"))
+        self.root.after(10000, lambda: self.log_message("✅ CORRETO: Leitores não se bloqueiam!", "sistema"))
+        self.root.after(15000, lambda: self.stop_simulation())
+    
+    def executar_deteccao_problemas(self):
+        """Demonstração de detecção de starvation"""
+        self.notebook.select(0)
+        if self.running:
+            self.stop_simulation()
+            time.sleep(0.5)
+        
+        self.clear_log()
+        self.leitores_var.set("8")
+        self.escritores_var.set("1")
+        
+        self.log_message("🚨 DETECÇÃO DE PROBLEMAS - STARVATION", "sistema")
+        self.log_message("=" * 50, "sistema")
+        self.log_message("⚠️ PROBLEMA: Muitos leitores podem causar starvation", "sistema")
+        self.log_message("⚙️ CENÁRIO: 8 leitores + 1 escritor (desbalanceado)", "sistema")
+        self.log_message("🔍 OBSERVE: Escritor pode ter dificuldade para executar", "sistema")
+        
+        self.root.after(3000, lambda: self._iniciar_deteccao())
+    
+    def _iniciar_deteccao(self):
+        self.start_simulation()
+        self.root.after(8000, lambda: self.log_message("⚠️ ANÁLISE: O escritor conseguiu executar?", "sistema"))
+        self.root.after(12000, lambda: self.log_message("🚨 STARVATION: Leitores podem impedir escritor!", "sistema"))
+        self.root.after(20000, lambda: self._finalizar_deteccao())
+    
+    def _finalizar_deteccao(self):
+        self.stop_simulation()
+        escritas = self.stats['total_escritas']
+        leituras = self.stats['total_leituras']
+        
+        self.log_message("", "sistema")
+        self.log_message("📊 ANÁLISE FINAL:", "sistema")
+        self.log_message(f"• Escritas realizadas: {escritas}", "sistema")
+        self.log_message(f"• Leituras realizadas: {leituras}", "sistema")
+        
+        if escritas < 3:
+            self.log_message("🚨 STARVATION DETECTADA! Escritor teve poucas oportunidades", "sistema")
+        else:
+            self.log_message("✅ Sem starvation - escritor conseguiu executar", "sistema")
+    
+    def executar_comparacao_cenarios(self):
+        """Executa múltiplos cenários para comparação"""
+        self.notebook.select(0)
+        if self.running:
+            self.stop_simulation()
+            time.sleep(0.5)
+        
+        self.clear_log()
+        
+        self.log_message("⚖️ COMPARAÇÃO DE CENÁRIOS", "sistema")
+        self.log_message("=" * 50, "sistema")
+        self.log_message("🎯 OBJETIVO: Comparar diferentes configurações", "sistema")
+        self.log_message("⏱️ DURAÇÃO: Cada cenário roda por 10 segundos", "sistema")
+        
+        # Lista de cenários para comparar
+        self.cenarios_comparacao = [
+            {'nome': 'Balanceado', 'leitores': 3, 'escritores': 2},
+            {'nome': 'Muitos Leitores', 'leitores': 6, 'escritores': 1},
+            {'nome': 'Muitos Escritores', 'leitores': 1, 'escritores': 4}
+        ]
+        
+        self.cenario_atual = 0
+        self.root.after(3000, lambda: self._executar_proximo_cenario())
+    
+    def _executar_proximo_cenario(self):
+        if self.cenario_atual >= len(self.cenarios_comparacao):
+            self._finalizar_comparacao()
+            return
+        
+        cenario = self.cenarios_comparacao[self.cenario_atual]
+        
+        self.log_message("", "sistema")
+        self.log_message(f"🔄 CENÁRIO {self.cenario_atual + 1}: {cenario['nome']}", "sistema")
+        self.log_message(f"⚙️ {cenario['leitores']} leitores, {cenario['escritores']} escritores", "sistema")
+        
+        self.leitores_var.set(str(cenario['leitores']))
+        self.escritores_var.set(str(cenario['escritores']))
+        
+        self.start_simulation()
+        
+        # Parar após 10 segundos e ir para próximo
+        self.root.after(10000, lambda: self._parar_e_proximo())
+    
+    def _parar_e_proximo(self):
+        leituras = self.stats['total_leituras']
+        escritas = self.stats['total_escritas']
+        
+        self.stop_simulation()
+        
+        cenario = self.cenarios_comparacao[self.cenario_atual]
+        self.log_message(f"📊 Resultado {cenario['nome']}: {leituras}L, {escritas}E", "sistema")
+        
+        self.cenario_atual += 1
+        self.root.after(2000, lambda: self._executar_proximo_cenario())
+    
+    def _finalizar_comparacao(self):
+        self.log_message("", "sistema")
+        self.log_message("🏁 COMPARAÇÃO CONCLUÍDA!", "sistema")
+        self.log_message("🎓 Compare os resultados acima para ver as diferenças!", "sistema")
+    
+    def executar_demonstracao_completa(self):
+        """Demonstração completa com todos os conceitos"""
+        self.notebook.select(0)
+        if self.running:
+            self.stop_simulation()
+            time.sleep(0.5)
+        
+        self.clear_log()
+        
+        self.log_message("🎓 DEMONSTRAÇÃO COMPLETA", "sistema")
+        self.log_message("=" * 60, "sistema")
+        self.log_message("📚 APRESENTAÇÃO ABRANGENTE DO PROBLEMA LEITORES-ESCRITORES", "sistema")
+        self.log_message("", "sistema")
+        self.log_message("🔍 ROTEIRO:", "sistema")
+        self.log_message("1. Introdução aos conceitos", "sistema")
+        self.log_message("2. Demonstração básica", "sistema")
+        self.log_message("3. Análise de concorrência", "sistema")
+        self.log_message("4. Detecção de problemas", "sistema")
+        self.log_message("5. Conclusões e aprendizado", "sistema")
+        
+        self.etapa_completa = 1
+        self.root.after(5000, lambda: self._executar_etapa_completa())
+    
+    def _executar_etapa_completa(self):
+        if self.etapa_completa == 1:
+            self.log_message("", "sistema")
+            self.log_message("📖 ETAPA 1: CONCEITOS FUNDAMENTAIS", "sistema")
+            self.log_message("• Leitores: Operações não-destrutivas", "sistema")
+            self.log_message("• Escritores: Operações destrutivas", "sistema")
+            self.log_message("• Sincronização: Coordenação necessária", "sistema")
+            
+        elif self.etapa_completa == 2:
+            self.log_message("", "sistema")
+            self.log_message("🚀 ETAPA 2: DEMONSTRAÇÃO BÁSICA", "sistema")
+            self.leitores_var.set("2")
+            self.escritores_var.set("1")
+            self.start_simulation()
+            
+        elif self.etapa_completa == 3:
+            self.stop_simulation()
+            self.log_message("", "sistema")
+            self.log_message("🔍 ETAPA 3: ANÁLISE DE CONCORRÊNCIA", "sistema")
+            self.leitores_var.set("4")
+            self.escritores_var.set("1")
+            self.start_simulation()
+            
+        elif self.etapa_completa == 4:
+            self.stop_simulation()
+            self.log_message("", "sistema")
+            self.log_message("🚨 ETAPA 4: DETECÇÃO DE PROBLEMAS", "sistema")
+            self.leitores_var.set("6")
+            self.escritores_var.set("1")
+            self.start_simulation()
+            
+        elif self.etapa_completa == 5:
+            self.stop_simulation()
+            self.log_message("", "sistema")
+            self.log_message("🎉 DEMONSTRAÇÃO COMPLETA FINALIZADA!", "sistema")
+            self.log_message("🎓 PRINCIPAIS APRENDIZADOS:", "sistema")
+            self.log_message("✅ Leitores podem coexistir simultaneamente", "sistema")
+            self.log_message("✅ Escritores precisam de acesso exclusivo", "sistema")
+            self.log_message("⚠️ Muitos leitores podem causar starvation", "sistema")
+            self.log_message("⚖️ Balanceamento é importante", "sistema")
+            return
+        
+        self.etapa_completa += 1
+        self.root.after(12000, lambda: self._executar_etapa_completa())
+
     def setup_configuracoes_tab(self):
         """Aba de configurações avançadas"""
         frame = ttk.Frame(self.notebook)
@@ -835,10 +1249,16 @@ A: Sim! Se algum teste falhar, há bug na implementação.
     
     def update_stats_display(self):
         """Atualiza display de estatísticas"""
-        if self.stats['tempo_inicio']:
-            tempo_execucao = (datetime.now() - self.stats['tempo_inicio']).total_seconds()
+        # Se não está rodando, usar o último tempo calculado ou zero
+        if not self.running:
+            if hasattr(self, '_ultimo_tempo_execucao'):
+                tempo_execucao = self._ultimo_tempo_execucao
+            else:
+                tempo_execucao = 0
         else:
-            tempo_execucao = 0
+            tempo_execucao = self.calcular_tempo_execucao()
+            # Salvar o tempo atual para quando parar
+            self._ultimo_tempo_execucao = tempo_execucao
         
         stats_text = f"""📊 ESTATÍSTICAS DE EXECUÇÃO
 
@@ -857,28 +1277,79 @@ A: Sim! Se algum teste falhar, há bug na implementação.
 
 ⚖️ Proporção L/E: {self.stats['total_leituras']/(max(self.stats['total_escritas'], 1)):.1f}
 
-🎯 Estado: {'🟢 Executando' if self.running else '🔴 Parado'}
-{'⏸️ Pausado' if self.paused else ''}"""
+🎯 Estado: {'🟢 Executando' if self.running and not self.paused else '🔴 Parado' if not self.running else '⏸️ Pausado'}"""
         
         self.stats_text.delete(1.0, tk.END)
         self.stats_text.insert(tk.END, stats_text)
+    
+    def calcular_tempo_execucao(self):
+        """Calcula o tempo de execução considerando pausas"""
+        if not self.stats['tempo_inicio']:
+            return 0
+        
+        tempo_total = (datetime.now() - self.stats['tempo_inicio']).total_seconds()
+        
+        # Subtrair tempo pausado
+        tempo_pausado_total = self.stats['tempo_pausado']
+        
+        # Se estiver pausado atualmente, adicionar tempo da pausa atual
+        if self.paused and self.stats['tempo_ultima_pausa']:
+            tempo_pausa_atual = (datetime.now() - self.stats['tempo_ultima_pausa']).total_seconds()
+            tempo_pausado_total += tempo_pausa_atual
+        
+        return max(0, tempo_total - tempo_pausado_total)
+    
+    def iniciar_operacao(self):
+        """Registra início de uma operação crítica"""
+        with self.operacoes_lock:
+            self.operacoes_ativas += 1
+    
+    def finalizar_operacao(self):
+        """Registra fim de uma operação crítica"""
+        with self.operacoes_lock:
+            if self.operacoes_ativas > 0:
+                self.operacoes_ativas -= 1
+    
+    def aguardar_operacoes_pendentes(self, timeout=3.0):
+        """Aguarda todas as operações pendentes terminarem"""
+        import time
+        start_time = time.time()
+        while self.operacoes_ativas > 0 and (time.time() - start_time) < timeout:
+            time.sleep(0.1)
+        return self.operacoes_ativas == 0
     
     # Métodos dos algoritmos (leitor e escritor)
     def leitor(self, id):
         """Algoritmo do leitor"""
         while self.running:
             if not self.paused:
-                # Delay antes de tentar ler
-                time.sleep(random.uniform(0.3, 1.5))
+                # Delay antes de tentar ler (com verificação de parada)
+                for _ in range(int(random.uniform(0.3, 1.5) * 10)):
+                    if not self.running:
+                        return
+                    time.sleep(0.1)
+                
+                if not self.running:
+                    return
+                
+                # Registrar início de operação crítica
+                self.iniciar_operacao()
                 
                 # Entrada na seção crítica
                 self.mutex.acquire()
+                if not self.running:
+                    self.mutex.release()
+                    self.finalizar_operacao()
+                    return
+                    
                 self.leitores_ativos += 1
                 if self.leitores_ativos == 1:
                     self.wrt.acquire()  # Primeiro leitor bloqueia escritores
-                    self.log_message(f"🔒 Leitor {id} BLOQUEIA escritores (primeiro leitor)")
+                    if self.running:
+                        self.log_message(f"🔒 Leitor {id} BLOQUEIA escritores (primeiro leitor)")
                 else:
-                    self.log_message(f"👥 Leitor {id} se JUNTA à leitura")
+                    if self.running:
+                        self.log_message(f"👥 Leitor {id} se JUNTA à leitura")
                 
                 # Atualizar máximo
                 if self.leitores_ativos > self.stats['leitores_simultaneos_max']:
@@ -886,53 +1357,105 @@ A: Sim! Se algum teste falhar, há bug na implementação.
                 
                 self.mutex.release()
                 
+                if not self.running:
+                    return
+                
                 # Leitura (seção crítica)
                 valor = self.dados
-                self.log_message(f"📖 Leitor {id} está LENDO valor: {valor}", "leitor")
-                self.stats['total_leituras'] += 1
+                if self.running:
+                    self.log_message(f"📖 Leitor {id} está LENDO valor: {valor}", "leitor")
+                    self.stats['total_leituras'] += 1
                 
-                # Simular tempo de leitura
-                time.sleep(random.uniform(0.2, 0.8))
+                # Simular tempo de leitura (com verificação de parada)
+                for _ in range(int(random.uniform(0.2, 0.8) * 10)):
+                    if not self.running:
+                        return
+                    time.sleep(0.1)
                 
                 # Saída da seção crítica
                 self.mutex.acquire()
+                if not self.running:
+                    self.mutex.release()
+                    return
+                    
                 self.leitores_ativos -= 1
                 if self.leitores_ativos == 0:
                     self.wrt.release()  # Último leitor libera escritores
-                    self.log_message(f"🔓 Leitor {id} LIBERA escritores (último leitor)")
+                    if self.running:
+                        self.log_message(f"🔓 Leitor {id} LIBERA escritores (último leitor)")
                 else:
-                    self.log_message(f"👤 Leitor {id} SAI da leitura")
+                    if self.running:
+                        self.log_message(f"👤 Leitor {id} SAI da leitura")
                 self.mutex.release()
                 
+                # Finalizar operação crítica
+                self.finalizar_operacao()
+                
             else:
+                if not self.running:
+                    return
                 time.sleep(0.1)  # Pausa quando pausado
     
     def escritor(self, id):
         """Algoritmo do escritor"""
         while self.running:
             if not self.paused:
-                # Delay antes de tentar escrever
-                time.sleep(random.uniform(0.5, 2.0))
+                # Delay antes de tentar escrever (com verificação de parada)
+                for _ in range(int(random.uniform(0.5, 2.0) * 10)):
+                    if not self.running:
+                        return
+                    time.sleep(0.1)
                 
-                self.log_message(f"⏳ Escritor {id} AGUARDANDO acesso exclusivo...")
+                if not self.running:
+                    return
+                
+                # Registrar início de operação crítica
+                self.iniciar_operacao()
+                    
+                if self.running:
+                    self.log_message(f"⏳ Escritor {id} AGUARDANDO acesso exclusivo...")
                 
                 # Entrada na seção crítica
                 self.wrt.acquire()
-                self.log_message(f"🔒 Escritor {id} OBTEVE acesso exclusivo", "escritor")
+                if not self.running:
+                    self.wrt.release()
+                    self.finalizar_operacao()
+                    return
+                    
+                if self.running:
+                    self.log_message(f"🔒 Escritor {id} OBTEVE acesso exclusivo", "escritor")
                 
                 # Escrita (seção crítica)
                 valor_antigo = self.dados
-                time.sleep(random.uniform(0.2, 0.8))  # Simular tempo de escrita
+                
+                # Simular tempo de escrita (com verificação de parada)
+                for _ in range(int(random.uniform(0.2, 0.8) * 10)):
+                    if not self.running:
+                        self.wrt.release()
+                        return
+                    time.sleep(0.1)
+                
+                if not self.running:
+                    self.wrt.release()
+                    return
+                    
                 self.dados += 1
                 
-                self.log_message(f"✍️ Escritor {id} ESCREVEU: {valor_antigo} → {self.dados}", "escritor")
-                self.stats['total_escritas'] += 1
+                if self.running:
+                    self.log_message(f"✍️ Escritor {id} ESCREVEU: {valor_antigo} → {self.dados}", "escritor")
+                    self.stats['total_escritas'] += 1
                 
                 # Saída da seção crítica
                 self.wrt.release()
-                self.log_message(f"🔓 Escritor {id} LIBEROU acesso exclusivo")
+                if self.running:
+                    self.log_message(f"🔓 Escritor {id} LIBEROU acesso exclusivo")
+                
+                # Finalizar operação crítica
+                self.finalizar_operacao()
                 
             else:
+                if not self.running:
+                    return
                 time.sleep(0.1)  # Pausa quando pausado
     
     # Métodos de controle da simulação
@@ -944,6 +1467,14 @@ A: Sim! Se algum teste falhar, há bug na implementação.
         self.running = True
         self.paused = False
         self.stats['tempo_inicio'] = datetime.now()
+        # Reset variáveis de timing
+        self.stats['tempo_pausado'] = 0
+        self.stats['tempo_ultima_pausa'] = None
+        # Reset último tempo de execução para display
+        self._ultimo_tempo_execucao = 0
+        # Reset contador de operações ativas
+        with self.operacoes_lock:
+            self.operacoes_ativas = 0
         
         # Reset
         self.dados = 0
@@ -982,25 +1513,103 @@ A: Sim! Se algum teste falhar, há bug na implementação.
     
     def toggle_pause(self):
         """Alterna pausa"""
-        self.paused = not self.paused
         if self.paused:
-            self.pause_btn.config(text="▶️ Continuar")
-            self.log_message("⏸️ Simulação PAUSADA")
-        else:
+            # Retomando - contabilizar tempo pausado
+            if self.stats['tempo_ultima_pausa']:
+                tempo_pausado = datetime.now() - self.stats['tempo_ultima_pausa']
+                self.stats['tempo_pausado'] += tempo_pausado.total_seconds()
+                self.stats['tempo_ultima_pausa'] = None
+            self.paused = False
             self.pause_btn.config(text="⏸️ Pausar")
             self.log_message("▶️ Simulação CONTINUADA")
+        else:
+            # Pausando - marcar início da pausa
+            self.stats['tempo_ultima_pausa'] = datetime.now()
+            self.paused = True
+            
+            # Aguardar operações pendentes terminarem
+            self.root.after(10, lambda: self._finalizar_pausa())
     
     def stop_simulation(self):
         """Para a simulação"""
         if not self.running:
             return
-            
+        
+        # Se estiver pausada, finalizar contabilização da pausa atual
+        if self.paused and self.stats['tempo_ultima_pausa']:
+            tempo_pausado = datetime.now() - self.stats['tempo_ultima_pausa']
+            self.stats['tempo_pausado'] += tempo_pausado.total_seconds()
+        
+        # Sinalizar parada imediata
         self.running = False
+        
+        # Aguardar operações pendentes terminarem
+        self.root.after(10, lambda: self._finalizar_parada())
+        
+        # Atualizar botões
+        self.start_btn.config(state=tk.NORMAL)
+        self.pause_btn.config(state=tk.DISABLED, text="⏸️ Pausar")
+        self.stop_btn.config(state=tk.DISABLED)
+    
+    def _finalizar_pausa(self):
+        """Finaliza o processo de pausa aguardando operações pendentes"""
+        if self.aguardar_operacoes_pendentes(timeout=2.0):
+            # Todas operações terminaram
+            self.pause_btn.config(text="▶️ Continuar")
+            self.log_message("⏸️ Simulação PAUSADA")
+        else:
+            # Timeout - forçar pausa mesmo com operações pendentes
+            self.pause_btn.config(text="▶️ Continuar")
+            self.log_message("⏸️ Simulação PAUSADA (algumas operações ainda em andamento)")
+    
+    def _finalizar_parada(self):
+        """Finaliza o processo de parada aguardando operações pendentes"""
+        if self.aguardar_operacoes_pendentes(timeout=3.0):
+            self.paused = False
+            self.stats['tempo_ultima_pausa'] = None
+            
+            # Liberar todos os semáforos para evitar deadlocks
+            try:
+                self.wrt.release()
+            except:
+                pass
+                
+            # Aguardar um momento para as threads terminarem
+            time.sleep(0.2)
+            
+            tempo_total = self.calcular_tempo_execucao()
+            
+            self.log_message(f"🛑 SIMULAÇÃO PARADA - Duração: {tempo_total:.1f}s")
+            self.log_message(f"📊 RESULTADO FINAL: {self.stats['total_leituras']} leituras, "
+                            f"{self.stats['total_escritas']} escritas, dados = {self.dados}")
+            
+            # Reset semáforos
+            self.mutex = threading.Semaphore(1)
+            self.wrt = threading.Semaphore(1)
+            self.leitores_ativos = 0
+            
+            # Atualizar botões
+            self.start_btn.config(state=tk.NORMAL)
+            self.pause_btn.config(state=tk.DISABLED, text="⏸️ Pausar")
+            self.stop_btn.config(state=tk.DISABLED)
+        else:
+            # Timeout - forçar parada mesmo com operações pendentes
+            self._finalizar_parada_forcada()
+    
+    def _finalizar_parada_forcada(self):
+        """Força a parada mesmo com operações em andamento"""
         self.paused = False
+        self.stats['tempo_ultima_pausa'] = None
         
-        tempo_total = (datetime.now() - self.stats['tempo_inicio']).total_seconds()
+        # Liberar todos os semáforos
+        try:
+            self.wrt.release()
+        except:
+            pass
+            
+        tempo_total = self.calcular_tempo_execucao()
         
-        self.log_message(f"🛑 SIMULAÇÃO PARADA - Duração: {tempo_total:.1f}s")
+        self.log_message(f"🛑 SIMULAÇÃO PARADA (forçada) - Duração: {tempo_total:.1f}s")
         self.log_message(f"📊 RESULTADO FINAL: {self.stats['total_leituras']} leituras, "
                         f"{self.stats['total_escritas']} escritas, dados = {self.dados}")
         
@@ -1059,7 +1668,7 @@ A: Sim! Se algum teste falhar, há bug na implementação.
         self.notebook.select(0)
     
     def executar_exemplo(self, exemplo):
-        """Executa exemplo automaticamente"""
+        """Executa exemplo automaticamente com demonstração guiada"""
         # Para simulação atual se estiver rodando
         if self.running:
             self.stop_simulation()
@@ -1076,14 +1685,129 @@ A: Sim! Se algum teste falhar, há bug na implementação.
         # Limpar log
         self.clear_log()
         
+        # Adicionar explicação do exemplo
+        self.log_message("=" * 60, "sistema")
+        self.log_message(f"🎯 DEMONSTRAÇÃO: {exemplo['nome']}", "sistema")
+        self.log_message("=" * 60, "sistema")
+        
+        # Adicionar descrição detalhada baseada no tipo de exemplo
+        self.adicionar_explicacao_exemplo(exemplo)
+        
+        # Dar tempo para ler a explicação
+        self.root.after(2000, lambda: self.iniciar_exemplo_com_comentarios(exemplo))
+    
+    def adicionar_explicacao_exemplo(self, exemplo):
+        """Adiciona explicação detalhada do exemplo"""
+        nome = exemplo['nome']
+        config = exemplo['config']
+        
+        if "Múltiplos Leitores" in nome:
+            self.log_message("📚 OBJETIVO: Demonstrar que vários leitores podem ler simultaneamente", "sistema")
+            self.log_message(f"⚙️ CONFIGURAÇÃO: {config['num_leitores']} leitores, {config['num_escritores']} escritor", "sistema")
+            self.log_message("🔍 O QUE OBSERVAR: Vários leitores ativos ao mesmo tempo", "sistema")
+            self.log_message("✅ ESPERADO: Leitores não se bloqueiam entre si", "sistema")
+            
+        elif "Exclusão Mútua" in nome:
+            self.log_message("🚨 OBJETIVO: Demonstrar exclusão mútua entre escritores", "sistema")
+            self.log_message(f"⚙️ CONFIGURAÇÃO: {config['num_leitores']} leitor, {config['num_escritores']} escritores", "sistema")
+            self.log_message("🔍 O QUE OBSERVAR: Apenas 1 escritor ativo por vez", "sistema")
+            self.log_message("✅ ESPERADO: Escritores aguardam sua vez", "sistema")
+            
+        elif "Balanceado" in nome:
+            self.log_message("⚖️ OBJETIVO: Interação equilibrada entre leitores e escritores", "sistema")
+            self.log_message(f"⚙️ CONFIGURAÇÃO: {config['num_leitores']} leitores, {config['num_escritores']} escritores", "sistema")
+            self.log_message("🔍 O QUE OBSERVAR: Alternância entre leituras e escritas", "sistema")
+            self.log_message("✅ ESPERADO: Coordenação harmoniosa", "sistema")
+            
+        elif "Starvation" in nome:
+            self.log_message("🚨 OBJETIVO: Demonstrar possível starvation (inanição)", "sistema")
+            self.log_message(f"⚙️ CONFIGURAÇÃO: {config['num_leitores']} leitores, {config['num_escritores']} escritor", "sistema")
+            self.log_message("🔍 O QUE OBSERVAR: Escritor pode ter dificuldade para executar", "sistema")
+            self.log_message("⚠️ PROBLEMA: Muitos leitores podem impedir escritor", "sistema")
+            
+        elif "Alta Concorrência" in nome:
+            self.log_message("🚀 OBJETIVO: Testar sistema com alta concorrência", "sistema")
+            self.log_message(f"⚙️ CONFIGURAÇÃO: {config['num_leitores']} leitores, {config['num_escritores']} escritores", "sistema")
+            self.log_message("🔍 O QUE OBSERVAR: Muitas operações simultâneas", "sistema")
+            self.log_message("✅ ESPERADO: Sistema mantém correção mesmo com alta carga", "sistema")
+            
+        elif "Stress" in nome:
+            self.log_message("💥 OBJETIVO: Teste extremo do sistema", "sistema")
+            self.log_message(f"⚙️ CONFIGURAÇÃO: {config['num_leitores']} leitores, {config['num_escritores']} escritores", "sistema")
+            self.log_message("🔍 O QUE OBSERVAR: Desempenho sob carga máxima", "sistema")
+            self.log_message("⚠️ ATENÇÃO: Pode causar alta utilização de CPU", "sistema")
+        
+        self.log_message("", "sistema")
+        self.log_message("⏱️ Iniciando demonstração em 2 segundos...", "sistema")
+        self.log_message("", "sistema")
+    
+    def iniciar_exemplo_com_comentarios(self, exemplo):
+        """Inicia exemplo com comentários educativos durante execução"""
         # Iniciar simulação
         self.start_simulation()
         
-        self.log_message(f"🎯 EXECUTANDO EXEMPLO: {exemplo['nome']}")
+        # Agendar comentários durante a execução
+        self.agendar_comentarios_exemplo(exemplo)
         
         # Parar automaticamente após duração especificada
-        duracao = config.get('duracao', 10) * 1000  # Converter para ms
-        self.root.after(duracao, self.stop_simulation)
+        duracao = exemplo['config'].get('duracao', 10) * 1000
+        self.root.after(duracao, lambda: self.finalizar_exemplo(exemplo))
+    
+    def agendar_comentarios_exemplo(self, exemplo):
+        """Agenda comentários educativos durante a execução"""
+        nome = exemplo['nome']
+        
+        # Comentários em diferentes momentos
+        if "Múltiplos Leitores" in nome:
+            self.root.after(3000, lambda: self.log_message("📊 ANÁLISE: Observe que vários leitores estão ativos simultaneamente", "sistema"))
+            self.root.after(6000, lambda: self.log_message("🔍 VERIFICAÇÃO: Isso é correto - leitores podem coexistir!", "sistema"))
+            
+        elif "Exclusão Mútua" in nome:
+            self.root.after(3000, lambda: self.log_message("📊 ANÁLISE: Observe que apenas 1 escritor executa por vez", "sistema"))
+            self.root.after(6000, lambda: self.log_message("🔍 VERIFICAÇÃO: Escritores aguardam exclusividade - correto!", "sistema"))
+            
+        elif "Starvation" in nome:
+            self.root.after(5000, lambda: self.log_message("⚠️ ANÁLISE: Muitos leitores podem estar impedindo o escritor", "sistema"))
+            self.root.after(8000, lambda: self.log_message("🚨 PROBLEMA: Este é o fenômeno de starvation!", "sistema"))
+            
+        elif "Balanceado" in nome:
+            self.root.after(4000, lambda: self.log_message("📊 ANÁLISE: Observe a alternância entre leituras e escritas", "sistema"))
+            self.root.after(8000, lambda: self.log_message("⚖️ EQUILÍBRIO: Cenário bem balanceado em ação!", "sistema"))
+    
+    def finalizar_exemplo(self, exemplo):
+        """Finaliza exemplo com resumo educativo"""
+        self.stop_simulation()
+        
+        self.log_message("", "sistema")
+        self.log_message("🏁 DEMONSTRAÇÃO CONCLUÍDA", "sistema")
+        self.log_message("=" * 40, "sistema")
+        
+        # Resumo específico do exemplo
+        if "Múltiplos Leitores" in exemplo['nome']:
+            self.log_message("✅ APRENDIZADO: Leitores podem coexistir simultaneamente", "sistema")
+            self.log_message("📚 CONCEITO: Operações de leitura não são destrutivas", "sistema")
+            
+        elif "Exclusão Mútua" in exemplo['nome']:
+            self.log_message("✅ APRENDIZADO: Escritores precisam de acesso exclusivo", "sistema")
+            self.log_message("🔒 CONCEITO: Exclusão mútua previne condições de corrida", "sistema")
+            
+        elif "Starvation" in exemplo['nome']:
+            self.log_message("⚠️ APRENDIZADO: Muitos leitores podem causar starvation", "sistema")
+            self.log_message("⚖️ SOLUÇÃO: Algoritmos fair podem resolver isso", "sistema")
+            
+        elif "Balanceado" in exemplo['nome']:
+            self.log_message("✅ APRENDIZADO: Coordenação harmoniosa é possível", "sistema")
+            self.log_message("⚖️ CONCEITO: Balanceamento evita problemas extremos", "sistema")
+        
+        # Estatísticas finais
+        self.log_message(f"📊 ESTATÍSTICAS FINAIS:", "sistema")
+        self.log_message(f"   • Leituras: {self.stats['total_leituras']}", "sistema")
+        self.log_message(f"   • Escritas: {self.stats['total_escritas']}", "sistema")
+        self.log_message(f"   • Leitores máx simultâneos: {self.stats['leitores_simultaneos_max']}", "sistema")
+        self.log_message(f"   • Valor final dos dados: {self.dados}", "sistema")
+        
+        self.log_message("", "sistema")
+        self.log_message("🎓 Experimente outros exemplos para mais aprendizado!", "sistema")
     
     def aplicar_exemplo(self, exemplo):
         """Aplica configuração do exemplo sem executar"""
