@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+Casos de teste para o problema dos Leitores-Escritores
+Testes unitários abrangentes para validar a implementação
+"""
 import unittest
 import threading
 import time
@@ -329,9 +334,9 @@ def executar_testes_detalhados():
             print(f"- {test}: {traceback}")
     
     if resultado.wasSuccessful():
-        print("\n✅ TODOS OS TESTES PASSARAM!")
+        print("\n[OK] TODOS OS TESTES PASSARAM!")
     else:
-        print("\n❌ ALGUNS TESTES FALHARAM!")
+        print("\n[ERRO] ALGUNS TESTES FALHARAM!")
     
     return resultado.wasSuccessful()
 
